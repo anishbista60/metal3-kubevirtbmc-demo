@@ -1,0 +1,13 @@
+# Alternative to 07-bmh-image-live-iso.yaml: the "typical" Metal3 workflow
+# that writes a disk image straight to the device instead of booting an
+# installer ISO. Requires a checksum. Not used by run-demo.sh by default.
+#
+# Applied as:
+#   kubectl patch bmh metal3-demo-vm --type=merge \
+#     --patch-file=manifests/08-bmh-image-qcow2.yaml
+spec:
+  image:
+    url: "https://cloud-images.ubuntu.com/resolute/current/resolute-server-cloudimg-amd64.img"
+    checksum: "https://cloud-images.ubuntu.com/resolute/current/SHA256SUMS"
+    checksumType: auto
+    format: qcow2

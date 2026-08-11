@@ -1,0 +1,12 @@
+# Step 3a: root disk for the VM that will play the role of a "bare metal" host.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: metal3-demo-vm-disk
+  namespace: default
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 20Gi

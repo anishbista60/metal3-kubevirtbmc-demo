@@ -1,0 +1,21 @@
+# Step 3c: KubeVirtBMC credentials + the VirtualMachineBMC that stands up a
+# virtual Redfish/IPMI endpoint in front of metal3-demo-vm.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: demo-bmc-secret
+  namespace: default
+stringData:
+  username: admin
+  password: password
+---
+apiVersion: bmc.kubevirt.io/v1beta1
+kind: VirtualMachineBMC
+metadata:
+  name: demo-bmc
+  namespace: default
+spec:
+  virtualMachineRef:
+    name: metal3-demo-vm
+  authSecretRef:
+    name: demo-bmc-secret

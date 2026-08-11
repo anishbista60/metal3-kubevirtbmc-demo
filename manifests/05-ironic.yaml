@@ -1,0 +1,17 @@
+# Step 4: the Ironic custom resource, managed by the Ironic Standalone
+# Operator (IrSO). disableHostNetwork is set because we're on a single
+# kind cluster with no provisioning network — in-cluster DNS is enough
+# since we only use Redfish virtual media, not PXE/DHCP.
+apiVersion: ironic.metal3.io/v1alpha1
+kind: Ironic
+metadata:
+  name: ironic
+  namespace: baremetal-operator-system
+spec:
+  apiCredentialsName: ironic-credentials
+  networking:
+    disableHostNetwork: true
+  tls:
+    certificateName: ironic-cert
+    disableVirtualMediaTLS: true
+  version: "37.0"

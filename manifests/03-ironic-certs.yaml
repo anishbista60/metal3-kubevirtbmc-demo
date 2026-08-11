@@ -1,0 +1,50 @@
+# Step 4: self-signed TLS chain for the Ironic API (cert-manager driven).
+# Note: virtual-media images themselves are served over plain HTTP
+# (disableVirtualMediaTLS: true in 05-ironic.yaml) because neither
+# KubeVirtBMC nor CDI can handle the Ironic-issued cert on that path yet.
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: selfsigned-issuer
+  namespace: baremetal-operator-system
+spec:
+  selfSigned: {}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: ironic-cacert
+  namespace: baremetal-operator-system
+spec:
+  commonName: ironic-ca
+  isCA: true
+  issuerRef:
+    kind: Issuer
+    name: selfsigned-issuer
+  secretName: ironic-cacert
+---
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: ca-issuer
+  namespace: baremetal-operator-system
+spec:
+  ca:
+    secretName: ironic-cacert
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: ironic-cert
+  namespace: baremetal-operator-system
+spec:
+  secretTemplate:
+    labels:
+      environment.metal3.io/ironic-standalone-operator: "true"
+  dnsNames:
+  - ironic.baremetal-operator-system.svc
+  - ironic.baremetal-operator-system.svc.cluster.local
+  issuerRef:
+    kind: Issuer
+    name: ca-issuer
+  secretName: ironic-cert

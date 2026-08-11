@@ -1,0 +1,13 @@
+# Reference copy of the kustomize overlay used to deploy the Bare Metal
+# Operator. run-demo.sh writes this same content into
+# <baremetal-operator repo>/config/overlays/kubevirtbmc-demo/kustomization.yaml
+# because BMO isn't published as a standalone Helm chart / flat manifest —
+# it's deployed straight from its kustomize bases.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: baremetal-operator-system
+resources:
+- ../../default
+components:
+- ../../components/basic-auth
+- ../../components/tls
