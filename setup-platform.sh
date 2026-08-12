@@ -7,6 +7,8 @@ VENDOR="$ROOT/vendor"
 REFRESH_REPOS="${REFRESH_REPOS:-false}"
 IRSO_REF="${IRSO_REF:-}"
 BMO_REF="${BMO_REF:-}"
+CERT_MANAGER_VERSION="${CERT_MANAGER_VERSION:-v1.19.2}"
+KUBEVIRT_VERSION="${KUBEVIRT_VERSION:-v1.8.4}"
 
 BOLD=$'\033[1m'; CYAN=$'\033[36m'; GREEN=$'\033[32m'; YELLOW=$'\033[33m'; RESET=$'\033[0m'
 
@@ -22,19 +24,15 @@ latest_tag() {
 
 install_cert_manager() {
   section "cert-manager"
-  local version
-  version="$(latest_tag cert-manager/cert-manager)"
-  kubectl apply -f "https://github.com/cert-manager/cert-manager/releases/download/${version}/cert-manager.yaml"
+  kubectl apply -f "https://github.com/cert-manager/cert-manager/releases/download/${CERT_MANAGER_VERSION}/cert-manager.yaml"
   kubectl wait --for=condition=ready pod \
     -l app.kubernetes.io/instance=cert-manager -n cert-manager --timeout=300s
 }
 
 install_kubevirt() {
   section "KubeVirt"
-  local version
-  version="$(latest_tag kubevirt/kubevirt)"
-  kubectl apply -f "https://github.com/kubevirt/kubevirt/releases/download/${version}/kubevirt-operator.yaml"
-  kubectl apply -f "https://github.com/kubevirt/kubevirt/releases/download/${version}/kubevirt-cr.yaml"
+  kubectl apply -f "https://github.com/kubevirt/kubevirt/releases/download/${KUBEVIRT_VERSION}/kubevirt-operator.yaml"
+  kubectl apply -f "https://github.com/kubevirt/kubevirt/releases/download/${KUBEVIRT_VERSION}/kubevirt-cr.yaml"
   kubectl -n kubevirt wait --for=condition=Available kubevirt/kubevirt --timeout=300s
 }
 
