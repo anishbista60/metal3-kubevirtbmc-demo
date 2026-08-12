@@ -2,14 +2,9 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MANIFESTS="$ROOT/manifests"
-VENDOR="$ROOT/vendor"
 
 PROVISION="${PROVISION:-false}"
 IMAGE_FORMAT="${IMAGE_FORMAT:-live-iso}"
-REFRESH_REPOS="${REFRESH_REPOS:-false}"
-SKIP_CDI="${SKIP_CDI:-false}"
-IRSO_REF="${IRSO_REF:-}"
-BMO_REF="${BMO_REF:-}"
 
 BOLD=$'\033[1m'; CYAN=$'\033[36m'; GREEN=$'\033[32m'; YELLOW=$'\033[33m'; RESET=$'\033[0m'
 
@@ -26,21 +21,6 @@ enable_kubevirt_hotplug() {
   kubectl patch kubevirt kubevirt -n kubevirt --type merge \
     -p '{"spec":{"configuration":{"developerConfiguration":{"featureGates":["DeclarativeHotplugVolumes"]}}}}'
   kubectl -n kubevirt wait --for=condition=Available kubevirt/kubevirt --timeout=180s
-}
-
-install_cdi() {
-  if [[ "$SKIP_CDI" == "true" ]]; then
-    section "CDI (Containerized Data Importer)"
-    info "SKIP_CDI=true, assuming already installed"
-    return
-  fi
-
-  section "CDI (Containerized Data Importer)"
-  local cdi_version
-  cdi_version="$(curl -sL -o /dev/null -w '%{url_effective}' https://github.com/kubevirt/containerized-data-importer/releases/latest | sed 's#.*/tag/##')"
-  kubectl apply -f "https://github.com/kubevirt/containerized-data-importer/releases/download/${cdi_version}/cdi-operator.yaml"
-  kubectl apply -f "https://github.com/kubevirt/containerized-data-importer/releases/download/${cdi_version}/cdi-cr.yaml"
-  kubectl wait --for=condition=Available cdi/cdi --timeout=300s
 }
 
 configure_storage_profile() {
@@ -78,49 +58,6 @@ deploy_vm() {
   kubectl -n default wait --for=condition=Ready virtualmachinebmcs/demo-bmc --timeout=120s
   kubectl get virtualmachinebmcs -n default
   kubectl get svc -n default -l kubevirt.io/virtualmachinebmc-name=demo-bmc
-}
-
-clone_repo() {
-  local url=$1 dir=$2 ref=$3
-  if [[ -d "$dir/.git" ]]; then
-    if [[ "$REFRESH_REPOS" == "true" ]]; then
-      git -C "$dir" fetch --all --tags
-      [[ -n "$ref" ]] && git -C "$dir" checkout "$ref"
-    else
-      info "$(basename "$dir") already cloned, leaving as-is (set REFRESH_REPOS=true to update)"
-    fi
-  else
-    git clone "$url" "$dir"
-    [[ -n "$ref" ]] && git -C "$dir" checkout "$ref"
-  fi
-}
-
-install_metal3() {
-  section "Ironic Standalone Operator"
-  mkdir -p "$VENDOR"
-  clone_repo https://github.com/metal3-io/ironic-standalone-operator.git \
-    "$VENDOR/ironic-standalone-operator" "$IRSO_REF"
-  ( cd "$VENDOR/ironic-standalone-operator" && make install deploy )
-  kubectl -n ironic-standalone-operator-system wait --for=condition=Available \
-    deploy/ironic-standalone-operator-controller-manager --timeout=180s
-
-  section "Ironic"
-  kubectl create ns baremetal-operator-system --dry-run=client -o yaml | kubectl apply -f -
-  kubectl apply -f "$MANIFESTS/03-ironic-certs.yaml"
-  kubectl apply -f "$MANIFESTS/04-ironic-credentials.yaml"
-  kubectl apply -f "$MANIFESTS/05-ironic.yaml"
-  kubectl -n baremetal-operator-system wait --for=condition=Ready ironic/ironic --timeout=300s
-
-  section "Bare Metal Operator"
-  clone_repo https://github.com/metal3-io/baremetal-operator.git \
-    "$VENDOR/baremetal-operator" "$BMO_REF"
-  local bmo="$VENDOR/baremetal-operator"
-  mkdir -p "$bmo/config/overlays/kubevirtbmc-demo"
-  cp "$MANIFESTS/bmo-overlay-kustomization.yaml" "$bmo/config/overlays/kubevirtbmc-demo/kustomization.yaml"
-  cp "$MANIFESTS/bmo-ironic.env" "$bmo/config/default/ironic.env"
-  ( cd "$bmo" && kustomize build config/overlays/kubevirtbmc-demo | kubectl apply -f - )
-  kubectl -n baremetal-operator-system wait --for=condition=Available \
-    deploy/baremetal-operator-controller-manager --timeout=180s
 }
 
 wait_for_bmh_state() {
@@ -195,11 +132,9 @@ summary() {
 
 main() {
   enable_kubevirt_hotplug
-  install_cdi
   configure_storage_profile
   install_kubevirtbmc
   deploy_vm
-  install_metal3
   create_bmh
   if [[ "$PROVISION" == "true" ]]; then
     provision_host

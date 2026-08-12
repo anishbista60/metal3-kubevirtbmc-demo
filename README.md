@@ -5,20 +5,19 @@ Demo that provisions a Metal3 `BareMetalHost` backed by a [KubeVirt](https://kub
 ## Prerequisites
 
 - A Kubernetes cluster (e.g. `kind`) with `kubectl`, `kustomize`, and `go`/`make` available
-- [KubeVirt](https://kubevirt.io) and [cert-manager](https://cert-manager.io) installed — follow the [KubeVirtBMC installation guide](https://docs.kubevirtbmc.io/getting-started/#installation)
 
 ## Usage
 
 ```bash
-./run-demo.sh
+./setup-platform.sh   # one-time: cert-manager, KubeVirt, CDI, Ironic Standalone Operator, Ironic, Bare Metal Operator
+./run-demo.sh         # configures the platform, installs KubeVirtBMC, and deploys the demo VM + BareMetalHost
 ```
 
-This will:
+`run-demo.sh` will:
 1. Enable the KubeVirt `DeclarativeHotplugVolumes` feature gate
-2. Install CDI and configure the default StorageClass's StorageProfile
+2. Configure the default StorageClass's StorageProfile
 3. Install KubeVirtBMC and deploy a demo VM + `VirtualMachineBMC`
-4. Install the Ironic Standalone Operator, Ironic, and the Bare Metal Operator
-5. Create a `BareMetalHost` and wait for it to reach `available`
+4. Create a `BareMetalHost` and wait for it to reach `available`
 
 To also provision an image onto the host:
 
@@ -26,13 +25,12 @@ To also provision an image onto the host:
 PROVISION=true ./run-demo.sh
 ```
 
-Useful env vars: `IMAGE_FORMAT` (`live-iso`|`qcow2`), `IMAGE_URL`/`IMAGE_CHECKSUM`, `STORAGE_CLASS`, `REFRESH_REPOS`, `SKIP_CDI`, `IRSO_REF`, `BMO_REF`.
+Useful env vars: `setup-platform.sh` — `REFRESH_REPOS`, `IRSO_REF`, `BMO_REF`. `run-demo.sh` — `IMAGE_FORMAT` (`live-iso`|`qcow2`), `IMAGE_URL`/`IMAGE_CHECKSUM`, `STORAGE_CLASS`.
 
 ## Cleanup
 
 ```bash
-./cleanup.sh          # also removes cloned vendor/ repos
-./cleanup.sh --keep-repos
+./cleanup.sh
 ```
 
-Leaves the cluster, KubeVirt, and cert-manager untouched.
+Removes the `BareMetalHost`, demo VM/`VirtualMachineBMC`/PVC, and KubeVirtBMC. Leaves everything installed by `setup-platform.sh` untouched.
