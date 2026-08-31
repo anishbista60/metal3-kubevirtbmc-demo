@@ -9,6 +9,7 @@ Demo that provisions a Metal3 `BareMetalHost` backed by a [KubeVirt](https://kub
 ## Usage
 
 ```bash
+kind create cluster --config kind-config.yaml
 ./setup-platform.sh   # one-time: cert-manager, KubeVirt, CDI, Ironic Standalone Operator, Ironic, Bare Metal Operator
 ./run-demo.sh         # configures the platform, installs KubeVirtBMC, and deploys the demo VM + BareMetalHost
 ```
