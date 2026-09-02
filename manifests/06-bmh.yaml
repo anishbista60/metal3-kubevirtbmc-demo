@@ -14,6 +14,12 @@ metadata:
   namespace: default
 spec:
   online: true
+  # Automated cleaning needs Ironic to reach back into the IPA agent
+  # (port 9999) inside the VM. KubeVirt's masquerade binding (see 01-vm.yaml)
+  # only allows outbound agent->Ironic traffic, so cleaning would hang
+  # forever waiting on a connection Ironic can never make. Disabled since
+  # there's nothing meaningful to clean on a fresh virtual disk anyway.
+  automatedCleaningMode: disabled
   bootMACAddress: "02:00:00:00:00:01"
   bmc:
     address: redfish-virtualmedia+http://metal3-demo-vm-virtbmc.default.svc.cluster.local:80/redfish/v1/Systems/1

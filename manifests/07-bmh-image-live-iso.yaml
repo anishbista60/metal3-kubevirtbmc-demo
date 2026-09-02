@@ -1,4 +1,4 @@
 spec:
   image:
-    url: "https://releases.ubuntu.com/noble/ubuntu-24.04.3-live-server-amd64.iso"
+    url: "http://releases.ubuntu.com/noble/ubuntu-24.04.3-live-server-amd64.iso"
     format: live-iso

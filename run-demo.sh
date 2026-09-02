@@ -55,7 +55,6 @@ deploy_vm() {
   kubectl apply -f "$MANIFESTS/00-vm-pvc.yaml"
   kubectl apply -f "$MANIFESTS/01-vm.yaml"
   kubectl apply -f "$MANIFESTS/02-vm-bmc.yaml"
-  kubectl -n default wait --for=condition=Ready virtualmachinebmcs/demo-bmc --timeout=120s
   kubectl get virtualmachinebmcs -n default
   kubectl get svc -n default -l kubevirt.io/virtualmachinebmc-name=demo-bmc
 }
