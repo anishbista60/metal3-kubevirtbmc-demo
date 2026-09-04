@@ -1,17 +1,4 @@
-# Step 3b: the KubeVirt VM standing in for a bare-metal server.
-#
-# - runStrategy: Halted keeps it powered off; Metal3/Ironic powers it on later.
-# - The cdrom device has no volume attached yet — KubeVirtBMC hotplugs a
-#   volume onto it when Ironic issues a Redfish "insert virtual media" call.
-# - macAddress is pinned so it matches BareMetalHost.spec.bootMACAddress;
-#   otherwise KubeVirt would assign a random MAC and Ironic couldn't match
-#   the host during inspection.
-# - masquerade (not bridge, as the original blog post uses) because kind's
-#   default CNI has no shared L2 segment between pods — with `bridge: {}`
-#   the guest can never ARP its way to another pod's IP (e.g. Ironic's),
-#   so IPA boots fine but its callbacks to Ironic never arrive and
-#   inspection hangs forever. masquerade NATs guest egress through the
-#   pod's own (working) networking instead, which works on any CNI.
+
 apiVersion: kubevirt.io/v1
 kind: VirtualMachine
 metadata:
