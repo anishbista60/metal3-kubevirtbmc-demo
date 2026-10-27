@@ -4,7 +4,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MANIFESTS="$ROOT/manifests"
 
 PROVISION="${PROVISION:-false}"
-IMAGE_FORMAT="${IMAGE_FORMAT:-live-iso}"
+KUBEVIRTBMC_VERSION="${KUBEVIRTBMC_VERSION:-v0.11.0}"   # >= v0.11.0 needed for HTTPS virtual media
 
 BOLD=$'\033[1m'; CYAN=$'\033[36m'; GREEN=$'\033[32m'; YELLOW=$'\033[33m'; RESET=$'\033[0m'
 
@@ -44,10 +44,29 @@ configure_storage_profile() {
 }
 
 install_kubevirtbmc() {
-  section "KubeVirtBMC"
-  kubectl apply -f https://github.com/kubevirtbmc/kubevirtbmc/releases/latest/download/kubevirtbmc-install.yaml
+  section "KubeVirtBMC $KUBEVIRTBMC_VERSION"
+  kubectl apply -f "https://github.com/kubevirtbmc/kubevirtbmc/releases/download/${KUBEVIRTBMC_VERSION}/kubevirtbmc-install.yaml"
   kubectl -n kubevirtbmc-system wait --for=condition=Ready pods \
     -l app.kubernetes.io/name=kubevirtbmc --timeout=120s
+}
+
+deploy_ironic_ca() {
+  section "Ironic CA for KubeVirtBMC"
+  # The VirtualMachineBMC references this ConfigMap so KubeVirtBMC and the CDI
+  # importer trust Ironic's HTTPS virtual media URLs.
+  kubectl -n default create configmap ironic-ca \
+    --from-literal=ca.pem="$(kubectl -n baremetal-operator-system get secret ironic-cacert -o jsonpath='{.data.tls\.crt}' | base64 -d)" \
+    --dry-run=client -o yaml | kubectl apply -f -
+}
+
+deploy_image_server() {
+  section "Image server (Ubuntu cloud image)"
+  # Started before the BMH so the download overlaps with inspection;
+  # provision_host waits for it.
+  kubectl apply -f "$MANIFESTS/07-image-server.yaml"
+  if [[ -n "${IMAGE_URL:-}" ]]; then
+    kubectl -n default set env deploy/image-server -c fetch-image IMAGE_URL="$IMAGE_URL"
+  fi
 }
 
 deploy_vm() {
@@ -90,25 +109,12 @@ create_bmh() {
 }
 
 provision_host() {
-  section "Provisioning (image install)"
-  if [[ "$IMAGE_FORMAT" == "qcow2" ]]; then
-    patch_file="$MANIFESTS/08-bmh-image-qcow2.yaml"
-  else
-    patch_file="$MANIFESTS/07-bmh-image-live-iso.yaml"
-  fi
-
-  if [[ -n "${IMAGE_URL:-}" ]]; then
-    tmp="$(mktemp)"
-    if [[ "$IMAGE_FORMAT" == "qcow2" ]]; then
-      printf 'spec:\n  image:\n    url: "%s"\n    checksum: "%s"\n    checksumType: auto\n    format: qcow2\n' \
-        "$IMAGE_URL" "${IMAGE_CHECKSUM:?IMAGE_CHECKSUM required when IMAGE_FORMAT=qcow2 and IMAGE_URL is overridden}" > "$tmp"
-    else
-      printf 'spec:\n  image:\n    url: "%s"\n    format: live-iso\n' "$IMAGE_URL" > "$tmp"
-    fi
-    patch_file="$tmp"
-  fi
-
-  kubectl patch bmh metal3-demo-vm -n default --type=merge --patch-file="$patch_file"
+  section "Provisioning (Ubuntu cloud image)"
+  info "waiting for the image server to download the image"
+  kubectl -n default rollout status deploy/image-server --timeout=1200s
+  kubectl apply -f "$MANIFESTS/09-bmh-userdata.yaml"
+  # available -> provisioning (IPA writes the qcow2 to /dev/vda) -> provisioned
+  kubectl patch bmh metal3-demo-vm -n default --type=merge --patch-file="$MANIFESTS/08-bmh-image.yaml"
   wait_for_bmh_state metal3-demo-vm provisioned 1800
 }
 
@@ -120,12 +126,14 @@ summary() {
   info "Explore further with:"
   echo "    kubectl get bmh metal3-demo-vm -n default -o yaml"
   echo "    kubectl get vm metal3-demo-vm -n default -o yaml"
-  echo "    virtctl console metal3-demo-vm -n default   # watch it boot"
+  echo "    virtctl console metal3-demo-vm -n default   # watch it boot; once provisioned, log in as ubuntu/ubuntu"
   echo
   if [[ "$PROVISION" != "true" ]]; then
     info "Host is 'available' but not provisioned. To provision live:"
     echo "    PROVISION=true $0"
-    echo "  or just run:  provision_host  (source this script, or copy the kubectl patch from manifests/07-bmh-image-live-iso.yaml)"
+    echo "  or apply the image patch by hand:"
+    echo "    kubectl apply -f $MANIFESTS/09-bmh-userdata.yaml"
+    echo "    kubectl patch bmh metal3-demo-vm -n default --type=merge --patch-file=$MANIFESTS/08-bmh-image.yaml"
   fi
 }
 
@@ -133,6 +141,8 @@ main() {
   enable_kubevirt_hotplug
   configure_storage_profile
   install_kubevirtbmc
+  deploy_ironic_ca
+  deploy_image_server
   deploy_vm
   create_bmh
   if [[ "$PROVISION" == "true" ]]; then

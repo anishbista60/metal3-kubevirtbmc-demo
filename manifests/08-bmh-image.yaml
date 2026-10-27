@@ -1,0 +1,17 @@
+# Provisions metal3-demo-vm with the Ubuntu 24.04 cloud image served by
+# 07-image-server.yaml: IPA writes the qcow2 straight to /dev/vda instead of
+# booting an installer ISO. Ironic verifies it against the sha256sum file the
+# image server generates. userData is the cloud-init config in 09-bmh-userdata.yaml.
+#
+# Applied as:
+#   kubectl patch bmh metal3-demo-vm -n default --type=merge \
+#     --patch-file=manifests/08-bmh-image.yaml
+spec:
+  image:
+    url: http://10.96.200.200:8080/node-image.img
+    checksum: http://10.96.200.200:8080/node-image.img.sha256sum
+    checksumType: sha256
+    format: qcow2
+  userData:
+    name: metal3-demo-vm-userdata
+    namespace: default

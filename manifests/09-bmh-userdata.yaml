@@ -1,0 +1,17 @@
+# cloud-init for the provisioned host. Cloud images ship without a password,
+# so this sets one for the default "ubuntu" user — enough to log in with
+#   virtctl console metal3-demo-vm
+# Demo only: don't reuse this on anything reachable.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: metal3-demo-vm-userdata
+  namespace: default
+stringData:
+  userData: |
+    #cloud-config
+    hostname: metal3-demo-vm
+    password: ubuntu
+    chpasswd:
+      expire: false
+    ssh_pwauth: true

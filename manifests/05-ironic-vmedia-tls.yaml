@@ -1,0 +1,27 @@
+# Ironic, managed by the Ironic Standalone Operator — with TLS end to end.
+#
+# Compared with 05-ironic-vmedia-http.yaml, virtual
+# media is no longer served over plain HTTP. KubeVirtBMC v0.11.0 lets each
+# VirtualMachineBMC reference a CA bundle (spec.redfish.virtualMedia.tls),
+# which it uses for its own size probe and hands to CDI's importer as a
+# certConfigMap — so no custom images with the CA baked in are needed.
+#
+# disableHostNetwork: single kind cluster, no provisioning network, no
+# PXE/DHCP — Redfish virtual media only, everything over the pod network.
+# Without host networking IrSO would advertise the pod IP, which isn't in the
+# certificate, so the external URLs point at the Service FQDN instead
+# (Service port 443 -> API, 8443 -> TLS image server).
+apiVersion: ironic.metal3.io/v1alpha1
+kind: Ironic
+metadata:
+  name: ironic
+  namespace: baremetal-operator-system
+spec:
+  apiCredentialsName: ironic-credentials
+  networking:
+    disableHostNetwork: true
+    externalCallbackURL: https://ironic.baremetal-operator-system.svc.cluster.local:443
+    imageServerExternalURL: https://ironic.baremetal-operator-system.svc.cluster.local:8443
+  tls:
+    certificateName: ironic-cert
+  version: "39.0"

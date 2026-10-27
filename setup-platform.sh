@@ -2,13 +2,16 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MANIFESTS="$ROOT/manifests"
-VENDOR="$ROOT/vendor"
 
-REFRESH_REPOS="${REFRESH_REPOS:-false}"
-IRSO_REF="${IRSO_REF:-}"
-BMO_REF="${BMO_REF:-}"
 CERT_MANAGER_VERSION="${CERT_MANAGER_VERSION:-v1.21.1}"
 KUBEVIRT_VERSION="${KUBEVIRT_VERSION:-v1.9.0}"
+IRSO_VERSION="${IRSO_VERSION:-v0.12.0}"
+BMO_VERSION="${BMO_VERSION:-v0.14.1}"
+
+# true  = Ironic serves virtual media over HTTPS; KubeVirtBMC/CDI trust Ironic's CA
+#         through VirtualMachineBMC.spec.redfish.virtualMedia.tls (KubeVirtBMC >= v0.11.0)
+# false = virtual media over plain HTTP
+VIRTUAL_MEDIA_TLS="${VIRTUAL_MEDIA_TLS:-true}"
 
 BOLD=$'\033[1m'; CYAN=$'\033[36m'; GREEN=$'\033[32m'; YELLOW=$'\033[33m'; RESET=$'\033[0m'
 
@@ -45,52 +48,49 @@ install_cdi() {
   kubectl wait --for=condition=Available cdi/cdi --timeout=300s
 }
 
-clone_repo() {
-  local url=$1 dir=$2 ref=$3
-  if [[ -d "$dir/.git" ]]; then
-    if [[ "$REFRESH_REPOS" == "true" ]]; then
-      git -C "$dir" fetch --all --tags
-      [[ -n "$ref" ]] && git -C "$dir" checkout "$ref"
-    else
-      info "$(basename "$dir") already cloned, leaving as-is (set REFRESH_REPOS=true to update)"
-    fi
-  else
-    git clone "$url" "$dir"
-    [[ -n "$ref" ]] && git -C "$dir" checkout "$ref"
-  fi
+# retry <description> <timeout-seconds> <cmd>: re-runs cmd every 5s until it succeeds.
+retry() {
+  local desc=$1 timeout=$2 cmd=$3 start
+  start=$(date +%s)
+  until eval "$cmd"; do
+    (( $(date +%s) - start > timeout )) && { warn "timed out waiting for $desc"; return 1; }
+    info "waiting for $desc"
+    sleep 5
+  done
 }
 
 install_metal3() {
-  section "Ironic Standalone Operator"
-  mkdir -p "$VENDOR"
-  clone_repo https://github.com/metal3-io/ironic-standalone-operator.git \
-    "$VENDOR/ironic-standalone-operator" "$IRSO_REF"
-  ( cd "$VENDOR/ironic-standalone-operator" && make install deploy )
+  section "Ironic Standalone Operator $IRSO_VERSION"
+  kubectl apply -f "https://github.com/metal3-io/ironic-standalone-operator/releases/download/${IRSO_VERSION}/install.yaml"
   kubectl -n ironic-standalone-operator-system wait --for=condition=Available \
-    deploy/ironic-standalone-operator-controller-manager --timeout=180s
+    deploy/ironic-standalone-operator-controller-manager --timeout=300s
 
   section "Ironic"
   kubectl create ns baremetal-operator-system --dry-run=client -o yaml | kubectl apply -f -
   kubectl apply -f "$MANIFESTS/03-ironic-certs.yaml"
   kubectl apply -f "$MANIFESTS/04-ironic-credentials.yaml"
-  kubectl apply -f "$MANIFESTS/05-ironic.yaml"
-  kubectl -n baremetal-operator-system wait --for=condition=Ready ironic/ironic --timeout=300s
+  kubectl -n baremetal-operator-system wait --for=condition=Ready certificate/ironic-cert --timeout=120s
+  local ironic_cr="$MANIFESTS/05-ironic-vmedia-tls.yaml"
+  [[ "$VIRTUAL_MEDIA_TLS" == "true" ]] || ironic_cr="$MANIFESTS/05-ironic-vmedia-http.yaml"
+  info "Ironic CR: $(basename "$ironic_cr")"
+  # The IrSO webhook can take a moment to start answering after the deployment is Available.
+  retry "Ironic CR accepted" 120 "kubectl apply -f '$ironic_cr'"
+  kubectl -n baremetal-operator-system wait --for=condition=Ready ironic/ironic --timeout=600s
 
-  section "Bare Metal Operator"
-  clone_repo https://github.com/metal3-io/baremetal-operator.git \
-    "$VENDOR/baremetal-operator" "$BMO_REF"
-  local bmo="$VENDOR/baremetal-operator"
-  mkdir -p "$bmo/config/overlays/kubevirtbmc-demo"
-  cp "$MANIFESTS/bmo-overlay-kustomization.yaml" "$bmo/config/overlays/kubevirtbmc-demo/kustomization.yaml"
-  cp "$MANIFESTS/bmo-ironic.env" "$bmo/config/default/ironic.env"
-  ( cd "$bmo" && kustomize build config/overlays/kubevirtbmc-demo | kubectl apply -f - )
-  kubectl -n baremetal-operator-system wait --for=condition=Available \
-    deploy/baremetal-operator-controller-manager --timeout=180s
+  section "Bare Metal Operator $BMO_VERSION"
+  kubectl apply -f "https://github.com/metal3-io/baremetal-operator/releases/download/${BMO_VERSION}/baremetal-operator.yaml"
+  # Instead of an endpoint + CA file, point BMO at the Ironic CR — it reads the
+  # URL, credentials and CA from it. Same as upstream's config/use-irso overlay.
+  kubectl -n baremetal-operator-system create configmap ironic \
+    --from-literal=IRONIC_NAME=ironic --dry-run=client -o yaml | kubectl replace -f -
+  kubectl -n baremetal-operator-system rollout restart deploy/baremetal-operator-controller-manager
+  kubectl -n baremetal-operator-system rollout status deploy/baremetal-operator-controller-manager --timeout=300s
 }
 
 summary() {
   section "Done"
   info "Platform installed: cert-manager, KubeVirt, CDI, Ironic Standalone Operator, Ironic, Bare Metal Operator"
+  info "Virtual media TLS: $VIRTUAL_MEDIA_TLS"
   info "Next: ./run-demo.sh"
 }
 
