@@ -14,8 +14,19 @@ kind: VirtualMachineBMC
 metadata:
   name: demo-bmc
   namespace: default
+  annotations:
+    # Pad the virtual media DataVolume so the ~500 MB IPA ISO still fits after
+    # filesystem overhead on local-path storage (KubeVirtBMC >= v0.11.0).
+    bmc.kubevirt.io/datavolume-size-margin: "15"
 spec:
   virtualMachineRef:
     name: metal3-demo-vm
   authSecretRef:
     name: metal3-demo-vm-bmc-secret
+  redfish:
+    virtualMedia:
+      tls:
+        # Trust Ironic's CA when fetching HTTPS virtual media
+        # (KubeVirtBMC >= v0.11.0). Unused when virtual media is plain HTTP.
+        caBundleConfigMapRef:
+          name: ironic-ca

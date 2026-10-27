@@ -1,0 +1,79 @@
+# In-cluster HTTP server for the OS image that Ironic writes to the host
+# (08-bmh-image.yaml). The init container downloads the Ubuntu cloud image
+# once into a hostPath on the kind node and writes its checksum file, so
+# re-creating the pod (or the whole demo) doesn't download it again.
+#
+# Fixed ClusterIP (kind-config.yaml pins the service subnet) so the BMH can use
+# a stable URL that IPA, running inside the VM, reaches over the pod network.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: image-server
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: image-server
+  template:
+    metadata:
+      labels:
+        app: image-server
+    spec:
+      initContainers:
+      - name: fetch-image
+        image: curlimages/curl:8.10.1
+        securityContext:
+          runAsUser: 0
+        env:
+        - name: IMAGE_URL
+          value: "https://cloud-images.ubuntu.com/releases/noble/release/ubuntu-24.04-server-cloudimg-amd64.img"
+        command: ["/bin/sh", "-ec"]
+        args:
+        - |
+          cd /images
+          if [ ! -s node-image.img ] || [ "$(cat node-image.url 2>/dev/null)" != "$IMAGE_URL" ]; then
+            echo "downloading $IMAGE_URL"
+            curl -fL --retry 5 -o node-image.img.part "$IMAGE_URL"
+            mv node-image.img.part node-image.img
+            echo "$IMAGE_URL" > node-image.url
+            rm -f node-image.img.sha256sum
+          fi
+          [ -s node-image.img.sha256sum ] || sha256sum node-image.img > node-image.img.sha256sum
+          chmod 0644 node-image.img node-image.img.sha256sum
+          cat node-image.img.sha256sum
+        volumeMounts:
+        - name: images
+          mountPath: /images
+      containers:
+      - name: nginx
+        image: nginxinc/nginx-unprivileged:1.27-alpine
+        ports:
+        - containerPort: 8080
+        readinessProbe:
+          httpGet:
+            path: /node-image.img.sha256sum
+            port: 8080
+        volumeMounts:
+        - name: images
+          mountPath: /usr/share/nginx/html
+          readOnly: true
+      volumes:
+      - name: images
+        hostPath:
+          path: /var/lib/metal3-demo-images
+          type: DirectoryOrCreate
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: image-server
+  namespace: default
+spec:
+  clusterIP: 10.96.200.200
+  selector:
+    app: image-server
+  ports:
+  - name: http
+    port: 8080
+    targetPort: 8080

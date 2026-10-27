@@ -1,7 +1,8 @@
-# Step 4: self-signed TLS chain for the Ironic API (cert-manager driven).
-# Note: virtual-media images themselves are served over plain HTTP
-# (disableVirtualMediaTLS: true in 05-ironic.yaml) because neither
-# KubeVirtBMC nor CDI can handle the Ironic-issued cert on that path yet.
+# Step 4: self-signed CA + serving certificate for Ironic (cert-manager driven).
+# run-demo.sh copies the CA (Secret ironic-cacert) into a ConfigMap "ironic-ca"
+# in the default namespace, which the VirtualMachineBMC references so that
+# KubeVirtBMC and the CDI importer trust Ironic's HTTPS virtual media URLs.
+# Both DNS names are needed: Ironic advertises the FQDN (see 05-ironic-*.yaml).
 apiVersion: cert-manager.io/v1
 kind: Issuer
 metadata:

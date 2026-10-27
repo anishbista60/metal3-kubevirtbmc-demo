@@ -1,5 +1,10 @@
 kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4
+networking:
+  # Spelled out because the image server (manifests/07-image-server.yaml)
+  # uses a fixed ClusterIP from the service subnet.
+  podSubnet: 10.244.0.0/16
+  serviceSubnet: 10.96.0.0/16
 nodes:
   - role: control-plane
     image: kindest/node:v1.36.4@sha256:099e049362a1526b2db71494e1947aae99bd16290d7c895f2b7ea312e3cbfaed
