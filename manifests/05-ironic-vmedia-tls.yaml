@@ -6,11 +6,16 @@
 # which it uses for its own size probe and hands to CDI's importer as a
 # certConfigMap — so no custom images with the CA baked in are needed.
 #
-# disableHostNetwork: single kind cluster, no provisioning network, no
-# PXE/DHCP — Redfish virtual media only, everything over the pod network.
-# Without host networking IrSO would advertise the pod IP, which isn't in the
-# certificate, so the external URLs point at the Service FQDN instead
-# (Service port 443 -> API, 8443 -> TLS image server).
+# Host networking: single kind cluster, no provisioning network, no PXE/DHCP —
+# Redfish virtual media only. Ironic still has to run on the host network so
+# it can reach the IPA agent: the demo VM uses bridge binding and gets its pod
+# IP with the pod /24 (10.244.0.0/24) as an on-link subnet, but kindnet's ptp
+# CNI has no shared L2 — the guest's ARP for another pod IP goes unanswered.
+# From the host network Ironic connects from the node IP, outside the /24, so
+# the guest replies via its gateway and Ironic -> agent :9999 works.
+#
+# The node IP isn't in the certificate, so the external URLs point at the
+# Service FQDN instead (Service port 443 -> API, 8443 -> TLS image server).
 apiVersion: ironic.metal3.io/v1alpha1
 kind: Ironic
 metadata:
@@ -19,7 +24,6 @@ metadata:
 spec:
   apiCredentialsName: ironic-credentials
   networking:
-    disableHostNetwork: true
     externalCallbackURL: https://ironic.baremetal-operator-system.svc.cluster.local:443
     imageServerExternalURL: https://ironic.baremetal-operator-system.svc.cluster.local:8443
   tls:

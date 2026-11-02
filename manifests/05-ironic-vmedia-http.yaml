@@ -1,7 +1,10 @@
 # Fallback (VIRTUAL_MEDIA_TLS=false): the Ironic API uses TLS, virtual media
-# images are served over plain HTTP. disableHostNetwork is set because we're
-# on a kind cluster with no provisioning network — in-cluster DNS is enough
-# since we only use Redfish virtual media, not PXE/DHCP.
+# images are served over plain HTTP. No provisioning network, no PXE/DHCP —
+# Redfish virtual media only.
+#
+# Ironic runs on the host network so it can reach the IPA agent in the
+# bridge-bound demo VM (see 05-ironic-vmedia-tls.yaml for why). The callback
+# URL uses the Service FQDN because the node IP isn't in the API certificate.
 apiVersion: ironic.metal3.io/v1alpha1
 kind: Ironic
 metadata:
@@ -10,7 +13,7 @@ metadata:
 spec:
   apiCredentialsName: ironic-credentials
   networking:
-    disableHostNetwork: true
+    externalCallbackURL: https://ironic.baremetal-operator-system.svc.cluster.local:443
   tls:
     certificateName: ironic-cert
     disableVirtualMediaTLS: true
