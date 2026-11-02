@@ -24,7 +24,11 @@ spec:
           interfaces:
           - name: default
             macAddress: "02:00:00:00:00:01"
-            masquerade: {}
+            # bridge (not masquerade) so the guest gets the pod IP via DHCP.
+            # With masquerade IPA advertises KubeVirt's internal NAT address
+            # (10.0.2.2), Ironic can't reach the agent on :9999, and
+            # provisioning hangs in deploy-wait.
+            bridge: {}
         firmware:
           bootloader:
             efi:
